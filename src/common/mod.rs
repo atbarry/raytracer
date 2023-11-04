@@ -9,5 +9,3 @@ pub use time::Time;
 pub use load::Image;
 pub use vertex::Vertex;
 pub use shapes::*;
-
-

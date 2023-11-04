@@ -1,3 +1,4 @@
+#![allow(unused)]
 mod app;
 mod render_env;
 mod common;
@@ -12,7 +13,7 @@ pub async fn run() -> anyhow::Result<()> {
     let event_loop = EventLoop::new().context("Failed to start event loop")?;
     let window = WindowBuilder::new()
         .with_title("Okay Lab Thing")
-        .with_inner_size(PhysicalSize::new(1920, 1080))
+        .with_inner_size(PhysicalSize::new(512, 512))
         .build(&event_loop)?;
     let mut render_env = RenderEnv::new(window).await?;
     let mut app = App::new(&render_env)?;
@@ -58,14 +59,14 @@ pub async fn run() -> anyhow::Result<()> {
                     // this event rather than in AboutToWait, since rendering in here allows
                     // the program to gracefully handle redraws requested by the OS.
                     app.update(&render_env);
-                    app.render(&render_env);
+                    app.render(&render_env).unwrap();
                 },
             Event::WindowEvent { event: WindowEvent::Resized(size), .. } => {
                 render_env.resize();
             }
             _ => ()
         }
-    });
+    })?;
 
     Ok(())
 }

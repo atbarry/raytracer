@@ -1,3 +1,4 @@
+#![allow(unused)]
 use wgpu::{util::DeviceExt, Buffer, BufferUsages, RenderPass};
 use crate::render_env::RenderEnv;
 use super::Vertex;
@@ -37,6 +38,7 @@ impl Shape {
     }
 }
 
+#[derive(Debug)]
 pub struct Triangles {
     vertex_buffer: Buffer,
     index_buffer: Buffer,
@@ -47,7 +49,7 @@ pub struct Triangles {
 impl Triangles {
     pub fn new(render_env: &RenderEnv, shapes: &[Shape]) -> Self {
         let mut combined_vertices = Vec::new();
-        let mut combined_indices = Vec::new();
+        let mut combined_indices: Vec<u32> = Vec::new();
         let mut current_index = 0;
 
         for Shape {
@@ -78,7 +80,7 @@ impl Triangles {
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: None,
-                contents: bytemuck::cast_slice(&combined_vertices),
+                contents: bytemuck::cast_slice(&combined_indices),
                 usage: BufferUsages::INDEX,
             });
 
@@ -88,12 +90,12 @@ impl Triangles {
         Self {
             vertex_buffer,
             index_buffer,
-            index_num,
             vertex_num,
+            index_num,
         }
     }
 
-    pub fn draw(&self, render_pass: &mut RenderPass) {
+    pub fn draw<'a>(&'a self, render_pass: &mut RenderPass<'a>) {
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         render_pass.draw_indexed(0..self.index_num, 0, 0..1);

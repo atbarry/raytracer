@@ -1,12 +1,4 @@
-use anyhow::Context;
-use bytemuck::{bytes_of, Pod, Zeroable};
-use wgpu::VertexBufferLayout;
-use wgpu::{
-    util::BufferInitDescriptor, util::DeviceExt, Buffer, BufferUsages, ColorTargetState,
-    CommandEncoderDescriptor, Device, Queue, RenderPipeline, ShaderModuleDescriptor, ShaderSource,
-    TextureDimension, TextureViewDescriptor,
-};
-
+use wgpu::{ ColorTargetState, CommandEncoderDescriptor, RenderPipeline,  TextureViewDescriptor};
 use crate::common::{Time, Vertex, Triangles, Shape};
 use crate::render_env::RenderEnv;
 
@@ -86,7 +78,7 @@ impl App {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.0,
+                            r: 1.0,
                             g: 0.0,
                             b: 0.0,
                             a: 1.0,

@@ -2,7 +2,7 @@ use bytemuck::{Zeroable, Pod};
 use wgpu::VertexBufferLayout;
 
 #[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
+#[derive(Clone, Copy, Pod, Zeroable, Debug)]
 pub struct Vertex {
     pub pos: [f32; 3],
     pub uv: [f32; 2],
