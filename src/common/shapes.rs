@@ -14,19 +14,19 @@ impl Shape {
             vertices: vec![
                 Vertex {
                     pos: [-1.0, -1.0, 0.0],
-                    uv: [0.0, 0.0],
+                    tex_coords: [0.0, 0.0],
                 },
                 Vertex {
                     pos: [1.0, -1.0, 0.0],
-                    uv: [1.0, 0.0],
+                    tex_coords: [1.0, 0.0],
                 },
                 Vertex {
                     pos: [1.0, 1.0, 0.0],
-                    uv: [1.0, 1.0],
+                    tex_coords: [1.0, 1.0],
                 },
                 Vertex {
                     pos: [-1.0, 1.0, 0.0],
-                    uv: [0.0, 1.0],
+                    tex_coords: [0.0, 1.0],
                 },
             ],
             indices: Some(vec![0, 1, 3, 1, 2, 3]),

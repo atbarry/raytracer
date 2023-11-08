@@ -1,6 +1,9 @@
-#![allow(unused)]
+#![allow(unused_imports)]
 mod app;
 mod render_env;
+mod raytracing;
+mod screen;
+mod scene;
 mod common;
 
 use std::time::{Instant, Duration};
@@ -12,21 +15,21 @@ use winit::{event_loop::{EventLoop, ControlFlow}, window::WindowBuilder, event::
 pub async fn run() -> anyhow::Result<()> {
     let event_loop = EventLoop::new().context("Failed to start event loop")?;
     let window = WindowBuilder::new()
-        .with_title("Okay Lab Thing")
-        .with_inner_size(PhysicalSize::new(512, 512))
+        .with_title("Ray tracer")
+        .with_inner_size(PhysicalSize::new(3840, 2160))
         .build(&event_loop)?;
     let mut render_env = RenderEnv::new(window).await?;
     let mut app = App::new(&render_env)?;
 
     let mut frame_counter = 0;
-    let wait_len = Duration::from_millis(10);
+    let wait_len = Duration::from_millis(1000);
     // event_loop.set_control_flow(ControlFlow::wait_duration(wait_len));
     event_loop.set_control_flow(ControlFlow::Poll);
     event_loop.run(move |event, elwt| {
         frame_counter += 1;
-        if frame_counter % 1000 == 0 {
-            dbg!(frame_counter);
-        }
+        // if frame_counter % 1000 == 0 {
+        //     dbg!(frame_counter);
+        // }
         match event {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
@@ -43,7 +46,7 @@ pub async fn run() -> anyhow::Result<()> {
                 // You only need to call this if you've determined that you need to redraw, in
                 // applications which do not always need to. Applications that redraw continuously
                 // can just render here instead.
-                // elwt.set_control_flow(ControlFlow::WaitUntil(next_frame_time(10)));
+                // elwt.set_control_flow(ControlFlow::wait_duration(wait_len));
                 render_env.window.request_redraw();
             },
             Event::NewEvents(StartCause::ResumeTimeReached { .. }) => {
@@ -63,6 +66,9 @@ pub async fn run() -> anyhow::Result<()> {
                 },
             Event::WindowEvent { event: WindowEvent::Resized(size), .. } => {
                 render_env.resize();
+            }
+            Event::WindowEvent { event: WindowEvent::KeyboardInput {event, .. }, .. } => {
+                app.on_input(&render_env, event);
             }
             _ => ()
         }

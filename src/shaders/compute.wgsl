@@ -1,0 +1,3 @@
+@compute
+fn csMain() {
+}
