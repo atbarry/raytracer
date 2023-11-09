@@ -16,7 +16,7 @@ pub async fn run() -> anyhow::Result<()> {
     let event_loop = EventLoop::new().context("Failed to start event loop")?;
     let window = WindowBuilder::new()
         .with_title("Ray tracer")
-        .with_inner_size(PhysicalSize::new(3840, 2160))
+        .with_inner_size(PhysicalSize::new(3840/4, 2160/4))
         .build(&event_loop)?;
     let mut render_env = RenderEnv::new(window).await?;
     let mut app = App::new(&render_env)?;

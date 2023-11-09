@@ -1,4 +1,4 @@
-use crate::render_env::RenderEnv;
+use crate::{render_env::RenderEnv, common::UNIFORM_BUFFER_BINDING};
 use bytemuck::{bytes_of, Pod, Zeroable};
 use glam::{Vec3, Vec3Swizzles, Vec4};
 use wgpu::{
@@ -51,7 +51,7 @@ impl Scene {
 
         let frames_since_change = 0;
         let frames_since_change_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Camera Buffer"),
+            label: Some("Frames Since Change Buffer"),
             contents: bytes_of(&frames_since_change),
             usage: BufferUsages::COPY_DST | BufferUsages::UNIFORM,
         });
@@ -61,11 +61,7 @@ impl Scene {
             entries: &[
                 BindGroupLayoutEntry {
                     binding: 0,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
+                    ty: UNIFORM_BUFFER_BINDING,
                     visibility: ShaderStages::COMPUTE,
                     count: None,
                 },
@@ -81,11 +77,7 @@ impl Scene {
                 },
                 BindGroupLayoutEntry {
                     binding: 2,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
+                    ty: UNIFORM_BUFFER_BINDING,
                     visibility: ShaderStages::COMPUTE,
                     count: None,
                 },
