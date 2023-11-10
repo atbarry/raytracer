@@ -1,3 +1,4 @@
+use bytemuck::bytes_of;
 use wgpu::{*, util::{BufferInitDescriptor, DeviceExt}};
 use wgpu::PipelineLayout;
 use crate::render_env::RenderEnv;
@@ -14,10 +15,9 @@ pub struct Time {
 impl Time {
     pub fn new(render_env: &RenderEnv) -> Self {
         let device = &render_env.device;
-        let time = 0;
         let time_uniform = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("delta uniform"),
-            contents: &0.0f32.to_ne_bytes(),
+            contents: bytes_of(&0.0f32),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
 

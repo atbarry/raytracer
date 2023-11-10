@@ -67,7 +67,8 @@ impl Camera {
 
     pub fn increase_frame(&mut self) {
         self.current_frame += 1;
-        progress_bar((self.current_frame as f32) / (self.frames_to_render as f32));
+        let msg = format!("{}/{}", self.current_frame.clamp(0, self.frames_to_render), self.frames_to_render);
+        progress_bar((self.current_frame as f32) / (self.frames_to_render as f32), &msg);
     }
 
     pub fn to_string(&self) -> String {
@@ -80,7 +81,7 @@ impl Camera {
     }
 }
 
-fn progress_bar(mut progress: f32) {
+fn progress_bar(mut progress: f32, msg: &str) {
     progress = progress.clamp(0.0, 1.0);
     let pieces = 100;
     let pieces_to_show = (progress * (pieces as f32)) as i32;
@@ -88,6 +89,6 @@ fn progress_bar(mut progress: f32) {
     let progress_str: String = (0..pieces_to_show).map(|_| '#').collect();
     let empty: String = (0..pieces - pieces_to_show).map(|_| ' ').collect();
 
-    print!("Progress: {:.2}% [{}{}]\r", progress * 100.0, progress_str, empty);
+    print!("Progress: {} [{}{}]\r", msg, progress_str, empty);
     std::io::stdout().flush().unwrap();
 }

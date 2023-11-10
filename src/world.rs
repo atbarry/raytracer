@@ -34,7 +34,7 @@ impl World {
             },
         ];
         let objects = ObjectData {
-            spheres: Sphere::random_bunch(),
+            spheres,
         };
 
         let camera = Camera {

@@ -23,7 +23,7 @@ struct Camera {
   forward: vec3<f32>,
   right: vec3<f32>,
   up: vec3<f32>,
-  @align(16)
+  padding: u32,
   focal_length: f32,
   samples_per_pixel: u32,
   frames_to_render: u32,
@@ -53,14 +53,14 @@ const MAX_U32: u32 = 4294967295u;
 
 @group(0) @binding(0) var color_buffer: texture_storage_2d<rgba8unorm, write>;
 @group(1) @binding(0) var color_cache: texture_2d<f32>;
-@group(1) @binding(1) var csampler: sampler;
 @group(2) @binding(0) var<uniform> camera: Camera;
 @group(2) @binding(1) var<storage, read> objects: ObjectData;
 @group(3) @binding(0) var<uniform> time: f32;
 
 @compute @workgroup_size(1,1,1)
 fn main(@builtin(global_invocation_id) uv: vec3<u32>) {
-  if camera.current_frame > camera.frames_to_render && CACHE_ON {
+  if camera.current_frame >= camera.frames_to_render && CACHE_ON {
+    // store_color(to_vec4(ONE), uv.xy);
     return;
   }
 
@@ -118,20 +118,21 @@ fn send_rays(pixel_center: vec3<f32>, pixel_delta: vec3<f32>) -> vec3<f32> {
 fn ray_color(start_ray: Ray) -> vec3<f32> {
   var rec: HitRecord;
   var ray = start_ray;
-  var color: vec3<f32> = FORWARD * -0.0;
+  var color: vec3<f32> = ONE * 0.5;
   var depth: i32;
   for (depth = 0; depth <= MAX_RAY_DEPTH; depth++) {
     var rec: HitRecord;
     if !hit(ray, &rec) {
-      // let a = 0.5 * (ray.direction.y + 1.0);
-      // color *= (1.0 - a) * ONE + a * vec3(0.5, 0.7, 1.0);
+      let a = 0.5 * (ray.direction.y + 1.0);
+      color *= (1.0 - a) * ONE + a * vec3(0.5, 0.7, 1.0);
       return color;
     }
 
-    if sin(4.0 * rec.normal.x * PI) + cos(4.0 * rec.normal.y * PI) > 1.0 && rec.index % 2u == 0u {
-      color = rec.color * 4.0;
+    let b = sin(4.0 * rec.normal.x * PI) + 2.0 * cos(4.0 * rec.normal.y * PI);
+    if rec.index % 2u == 0u && b < -0.0 {
+      color = rec.color;
     }
-    if sin(4.0 * rec.normal.x * PI) + cos(4.0 * rec.normal.y * PI) > 0.0 && rec.index % 2u == 0u {
+    if rec.index % 2u == 0u && b > 0.0 {
       color = rec.color * 4.0;
     }
 
