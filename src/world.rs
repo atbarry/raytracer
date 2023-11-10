@@ -43,8 +43,8 @@ impl World {
             up: Vec3::new(0.0, 1.0, 0.0),
             right: Vec3::new(1.0, 0.0, 0.0),
             focal_length: 1.0,
-            samples_per_pixel: 4,
-            frames_to_render: 10,
+            samples_per_pixel: 1,
+            frames_to_render: 8,
             current_frame: 0,
         };
 

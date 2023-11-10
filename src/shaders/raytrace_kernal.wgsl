@@ -133,7 +133,7 @@ fn ray_color(start_ray: Ray) -> vec3<f32> {
     // }
     ray.direction = rec.normal + random_unit_vector();
     ray.origin = rec.point;
-    color *= 0.8 * rec.color;
+    color *= 1.0 * rec.color;
     // return color;
     let x = random_on_hemisphere(rec.normal).z;
   }
