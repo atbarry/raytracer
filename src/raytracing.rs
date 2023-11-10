@@ -13,7 +13,7 @@ pub struct Raytracer {
 }
 
 impl Raytracer {
-    pub fn new(render_env: &RenderEnv, scene_bind_layout: &BindGroupLayout, time_bind_layout: &BindGroupLayout) -> Self {
+    pub fn new(render_env: &RenderEnv, world_bind_layout: &BindGroupLayout, time_bind_layout: &BindGroupLayout) -> Self {
         let device = &render_env.device;
         let size = render_env.window.inner_size();
 
@@ -132,7 +132,7 @@ impl Raytracer {
             bind_group_layouts: &[
                 &storage_bind_layout,
                 &sampler_bind_layout,
-                scene_bind_layout,
+                world_bind_layout,
                 time_bind_layout,
             ],
             push_constant_ranges: &[],
@@ -175,7 +175,7 @@ impl Raytracer {
     // }
     //
 
-    pub fn compute(&self, encoder: &mut CommandEncoder, scene_bind_group: &BindGroup, time_bind_group: &BindGroup) {
+    pub fn compute(&self, encoder: &mut CommandEncoder, world_bind_group: &BindGroup, time_bind_group: &BindGroup) {
         let mut ray_trace_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("Ray tracing pass"),
             timestamp_writes: None,
@@ -187,7 +187,7 @@ impl Raytracer {
         ray_trace_pass.set_pipeline(&self.pipeline);
         ray_trace_pass.set_bind_group(0, &self.storage_bind_group, &[]);
         ray_trace_pass.set_bind_group(1, &self.sampler_bind_group, &[]);
-        ray_trace_pass.set_bind_group(2, scene_bind_group, &[]);
+        ray_trace_pass.set_bind_group(2, world_bind_group, &[]);
         ray_trace_pass.set_bind_group(3, time_bind_group, &[]);
         ray_trace_pass.dispatch_workgroups(width, height, 1);
         drop(ray_trace_pass);

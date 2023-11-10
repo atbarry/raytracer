@@ -22,13 +22,16 @@ struct Camera {
   forward: vec3<f32>,
   right: vec3<f32>,
   up: vec3<f32>,
+  @align(16)
   focal_length: f32,
+  samples_per_pixel: u32,
+  frames_to_render: u32,
+  current_frame: u32,
 }
 
 struct ObjectData {
   spheres: array<Sphere>,
 }
-
 
 // Vectors
 const ZERO: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
@@ -39,9 +42,9 @@ const FORWARD: vec3<f32> = vec3<f32>(0.0, 0.0, -1.0);
 
 // Shader variables
 const RAY_TMAX: f32 = 1000.0;
-const RAY_TMIN: f32 = 0.5;
-const SAMPLES_PER_PIXEL: u32 = 1u;
-const MAX_CACHE_WEIGHT: f32 = 15.0 / 16.0;
+const RAY_TMIN: f32 = 0.001;
+const MAX_RAY_DEPTH: i32 = 50;
+const CACHE_ON: bool = true;
 
 // Other constants
 const PI: f32 = 3.1415926535897932385;
@@ -52,11 +55,14 @@ const MAX_U32: u32 = 4294967295u;
 @group(1) @binding(1) var csampler: sampler;
 @group(2) @binding(0) var<uniform> camera: Camera;
 @group(2) @binding(1) var<storage, read> objects: ObjectData;
-@group(2) @binding(2) var<uniform> cached_frames: i32;
 @group(3) @binding(0) var<uniform> time: f32;
 
 @compute @workgroup_size(1,1,1)
 fn main(@builtin(global_invocation_id) uv: vec3<u32>) {
+  if camera.current_frame > camera.frames_to_render && CACHE_ON {
+    return;
+  }
+
   initialize_rng(uv.x, uv.y);
   let screen_size = textureDimensions(color_buffer);
   let scan_x = f32(uv.x);
@@ -78,45 +84,63 @@ fn main(@builtin(global_invocation_id) uv: vec3<u32>) {
   let pixel_center = pixel00_pos + scan_x*pixel_delta_u + scan_y*pixel_delta_v;
   let pixel_color = send_rays(pixel_center, pixel_delta_v + pixel_delta_u);
 
-  store_color(color_ajustments(pixel_color), uv.xy);
+  store_color(to_vec4(pixel_color), uv.xy);
 }
 
 fn store_color(pixel_color: vec4<f32>, uv: vec2<u32>) {
-  let cached_color = textureLoad(color_cache, uv, 0);
-
-  let frames = f32(cached_frames + 1);
-  var cw = f32(cached_frames) / frames;
-
-  if cw > MAX_CACHE_WEIGHT {
-    cw = MAX_CACHE_WEIGHT;
+  var color = pixel_color;
+  if CACHE_ON {
+    let cached_color = textureLoad(color_cache, uv, 0);
+    color = combine_pixel_cache_color(pixel_color, cached_color);
   }
 
-  let rw = 1.0 - cw;
-  let color = pixel_color*rw + cached_color*cw; 
   textureStore(color_buffer, uv, color);
+}
+
+fn combine_pixel_cache_color(pixel_color: vec4<f32>, cached_color: vec4<f32>) -> vec4<f32> {
+  let frame = camera.current_frame;
+  let next_frame = f32(frame + 1u);
+  var cw = f32(frame) / next_frame;
+  let rw = 1.0 - cw;
+  return pixel_color*rw + cached_color*cw; 
 }
 
 fn send_rays(pixel_center: vec3<f32>, pixel_delta: vec3<f32>) -> vec3<f32> {
   var color = ZERO;
-  for(var sample = 0u; sample < SAMPLES_PER_PIXEL; sample++) {
+  for(var sample = 0u; sample < camera.samples_per_pixel; sample++) {
     let ray = get_random_ray(pixel_center, pixel_delta, sample);
     color += ray_color(ray);
   }
-  return color / f32(SAMPLES_PER_PIXEL);
+  return color / f32(camera.samples_per_pixel);
 }
 
-fn ray_color(ray: Ray) -> vec3<f32> {
+fn ray_color(start_ray: Ray) -> vec3<f32> {
   var rec: HitRecord;
+  var ray = start_ray;
+  var color: vec3<f32> = ONE;
+  var depth: i32;
+  for (depth = 0; depth <= MAX_RAY_DEPTH; depth++) {
+    var rec: HitRecord;
+    if !hit(ray, &rec) {
+      let a = 0.5 * (ray.direction.y + 1.0);
+      color *= (1.0 - a) * ONE + a * vec3(0.5, 0.7, 1.0);
+      return color;
+      // return color;
+    }
 
-  if hit(ray, &rec) {
-    return normal_to_color(rec.normal);
-    // return  rec.color * dot(rec.color, rec.normal);
+    // if depth == 2 {
+    // return RIGHT;
+    // }
+    ray.direction = rec.normal + random_unit_vector();
+    ray.origin = rec.point;
+    color *= 0.8 * rec.color;
+    // return color;
+    let x = random_on_hemisphere(rec.normal).z;
   }
 
-  let a = 0.5 * (ray.direction.y + 1.0);
-  // let color = (1.0 - a) * ONE + a * vec3(0.5, 0.7, 1.0);
-  let color = ZERO;
-  return color;
+  // if it makes it out of the loop it did not
+  // hit any light
+  return ZERO;
 }
 
 fn get_random_ray(pixel_center: vec3<f32>, pixel_delta: vec3<f32>, ray_index: u32) -> Ray {
@@ -152,9 +176,9 @@ fn hit_sphere(
   rec: ptr<function, HitRecord>
 ) -> bool {
   let oc = ray.origin - sphere.center;
-  let a = pow(length(ray.direction), 2.0);
+  let a = length_squared(ray.direction);
   let half_b = dot(oc, ray.direction);
-  let c = pow(length(oc), 2.0) - sphere.radius * sphere.radius;
+  let c = length_squared(oc) - sphere.radius * sphere.radius;
 
   let discriminant = half_b * half_b - a * c;
   if discriminant < 0.0 { return false; }
@@ -169,7 +193,6 @@ fn hit_sphere(
     }
   }
 
-  
   (*rec).t = root;
   (*rec).point = ray_at(ray, root);
   (*rec).normal = ((*rec).point - sphere.center) / sphere.radius;
@@ -197,11 +220,8 @@ fn set_face_normal(rec: ptr<function, HitRecord>, ray: Ray, outward_normal: vec3
   }
 }
 
-fn color_ajustments(color: vec3<f32>) -> vec4<f32> {
-  let uniformish = pow(color, ONE * 2.2);
-  return vec4<f32>(uniformish.xyz, 1.0);
-}
 
+// RANDOM Stuff
 var<private> rng: u32;
 fn initialize_rng(u: u32, v: u32) {
   let x = (u << 15u) ^ (u*1729u + 8192374u);
@@ -225,4 +245,38 @@ fn rand() -> f32 {
 
 fn rand_vec3() -> vec3<f32> {
   return vec3<f32>(rand(), rand(), rand());
+}
+
+fn random_in_unit_sphere() -> vec3<f32> {
+  loop {
+    let p = rand_vec3() * 2.0 - 1.0;
+    if length_squared(p) < 1.0 {
+      return p;
+    }
+  }
+  // not smart enough to see that it can't make it here
+  return ZERO;
+}
+
+fn random_unit_vector() -> vec3<f32> {
+  return normalize(random_in_unit_sphere());
+}
+
+fn random_on_hemisphere(normal: vec3<f32>) -> vec3<f32> {
+  let on_unit_sphere = random_unit_vector();
+  if (dot(on_unit_sphere, normal) > 0.0) {
+    return on_unit_sphere;
+  } else {
+    return -on_unit_sphere;
+  }
+}
+
+// Helpers
+fn length_squared(x: vec3<f32>) -> f32 {
+  let len = length(x);
+  return len * len;
+}
+
+fn to_vec4(x: vec3<f32>) -> vec4<f32> {
+  return vec4<f32> (x.xyz, 1.0);
 }

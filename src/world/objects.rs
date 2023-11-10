@@ -13,17 +13,17 @@ impl ObjectData {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
+#[derive(Clone, Copy, Pod, Zeroable, Debug)]
 pub struct Sphere {
-    color: Vec4,
-    center: Vec3,
-    radius: f32,
+    pub color: Vec4,
+    pub center: Vec3,
+    pub radius: f32,
 }
 
 impl Sphere {
     pub fn random_bunch() -> Vec<Sphere> {
-        let from = vec3(-2.0, -1.0, -5.0);
-        let to = vec3(2.0, 1.0, -20.0);
+        let from = vec3(-3.0, -2.0, -1.5);
+        let to = vec3(3.0, 2.0, -10.0);
 
         let mut rng = rand::thread_rng();
         let num = rng.gen_range(5..22);
@@ -35,6 +35,15 @@ impl Sphere {
                 radius: rng.gen_range(0.2..1.5),
             }
         ).collect()
+    }
+
+    pub fn new(center: Vec3, radius: f32) -> Self {
+        let mut rng = rand::thread_rng();
+        Self {
+            center,
+            radius,
+            color: rng.gen(),
+        }
     }
 }
 

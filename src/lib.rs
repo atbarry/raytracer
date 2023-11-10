@@ -3,7 +3,7 @@ mod app;
 mod render_env;
 mod raytracing;
 mod screen;
-mod scene;
+mod world;
 mod common;
 
 use std::time::{Instant, Duration};
@@ -16,7 +16,7 @@ pub async fn run() -> anyhow::Result<()> {
     let event_loop = EventLoop::new().context("Failed to start event loop")?;
     let window = WindowBuilder::new()
         .with_title("Ray tracer")
-        .with_inner_size(PhysicalSize::new(3840/4, 2160/4))
+        .with_inner_size(PhysicalSize::new(3840/2, 2160/2))
         .build(&event_loop)?;
     let mut render_env = RenderEnv::new(window).await?;
     let mut app = App::new(&render_env)?;

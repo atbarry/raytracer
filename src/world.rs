@@ -1,30 +1,38 @@
 use crate::{render_env::RenderEnv, common::UNIFORM_BUFFER_BINDING};
 use bytemuck::{bytes_of, Pod, Zeroable};
-use glam::{Vec3, Vec3Swizzles, Vec4};
+use glam::{Vec3, Vec3Swizzles, Vec4, vec3};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     *,
 };
+use winit::keyboard::KeyCode;
 
-use self::objects::{ObjectData, Sphere};
+use self::{objects::{ObjectData, Sphere}, camera::Camera};
 
 mod objects;
+mod camera;
 
-pub struct Scene {
+pub struct World {
     camera: Camera,
     objects: ObjectData,
     camera_buffer: Buffer,
     objects_buffer: Buffer,
-    frames_since_change: i32,
-    frames_since_change_buffer: Buffer,
     pub bind_group: BindGroup,
     pub bind_group_layout: BindGroupLayout,
 }
 
-impl Scene {
+impl World {
     pub fn new(render_env: &RenderEnv) -> Self {
         let device = &render_env.device;
 
+        let spheres = vec![
+            Sphere::new(vec3(0.0,-0.0, -1.0), 0.5),
+            Sphere {
+                color: Vec4::ONE,
+                radius: 100.0,
+                center: vec3(0.0, -100.5, -1.0),
+            },
+        ];
         let objects = ObjectData {
             spheres: Sphere::random_bunch(),
         };
@@ -34,7 +42,10 @@ impl Scene {
             forward: Vec3::new(0.0, 0.0, -1.0),
             up: Vec3::new(0.0, 1.0, 0.0),
             right: Vec3::new(1.0, 0.0, 0.0),
-            focal_length: 2.0,
+            focal_length: 1.0,
+            samples_per_pixel: 4,
+            frames_to_render: 10,
+            current_frame: 0,
         };
 
         let camera_buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -106,36 +117,40 @@ impl Scene {
         return Self {
             camera,
             objects,
-            frames_since_change,
             camera_buffer,
             objects_buffer,
-            frames_since_change_buffer,
             bind_group_layout,
             bind_group,
         };
     }
 
-    pub fn scene_was_updated(&mut self, render_env: &RenderEnv) {
-        self.frames_since_change = 0;
-        render_env.queue.write_buffer(
-            &self.frames_since_change_buffer,
-            0,
-            bytes_of(&self.frames_since_change),
-        );
+    pub fn on_key_press(&mut self, render_env: &RenderEnv, key: KeyCode) {
+        let queue = &render_env.queue;
+        let mut scene_was_changed = false;
+        if self.camera.key_press(key) {
+            queue.write_buffer(&self.camera_buffer, 0, bytes_of(&self.camera.to_raw()));
+            scene_was_changed = true;
+        }
+
+        if scene_was_changed {
+            self.scene_was_updated(&render_env);
+        }
+    }
+
+    fn scene_was_updated(&mut self, render_env: &RenderEnv) {
+        self.camera.reset_render();
+        render_env.queue.write_buffer(&self.camera_buffer, 0, bytes_of(&self.camera.to_raw()));
     }
 
     pub fn increase_frame(&mut self, render_env: &RenderEnv) {
-        self.frames_since_change += 1;
-        dbg!(self.frames_since_change);
-        render_env.queue.write_buffer(
-            &self.frames_since_change_buffer,
-            0,
-            bytes_of(&self.frames_since_change),
-        );
+        self.camera.increase_frame();
+        render_env.queue.write_buffer(&self.camera_buffer, 0, bytes_of(&self.camera.to_raw()));
     }
 
     pub fn reload(&mut self, render_env: &RenderEnv) {
+        let current_camera = self.camera;
         *self = Self::new(render_env);
+        self.camera = current_camera.clone();
         self.scene_was_updated(render_env);
     }
 
@@ -144,33 +159,3 @@ impl Scene {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct Camera {
-    pos: Vec3,
-    forward: Vec3,
-    right: Vec3,
-    up: Vec3,
-    focal_length: f32,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, Pod, Zeroable)]
-pub struct CameraRaw {
-    pos: Vec4,
-    forward: Vec4,
-    right: Vec4,
-    up: Vec3,
-    focal_length: f32,
-}
-
-impl Camera {
-    fn to_raw(&self) -> CameraRaw {
-        CameraRaw {
-            pos: self.pos.xyzz(),
-            forward: self.forward.xyzz(),
-            right: self.right.xyzz(),
-            up: self.up,
-            focal_length: self.focal_length,
-        }
-    }
-}

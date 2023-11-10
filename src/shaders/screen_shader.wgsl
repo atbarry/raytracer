@@ -25,6 +25,12 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
   let tex_coord = in.tex_coord;
   var color = textureSample(color_buffer, screen_sampler, tex_coord); 
-  return color;
+  return color_ajustments(color.xyz);
 }
 
+const ONE: vec3<f32> = vec3<f32> (1.0, 1.0, 1.0);
+
+fn color_ajustments(color: vec3<f32>) -> vec4<f32> {
+  let uniformish = pow(color, ONE * 2.2);
+  return vec4<f32>(uniformish.xyz, 1.0);
+}
