@@ -14,6 +14,7 @@ struct HitRecord {
   normal: vec3<f32>,
   color: vec3<f32>,
   t: f32,
+  index: u32,
   front_face: bool,
 }
 
@@ -117,15 +118,21 @@ fn send_rays(pixel_center: vec3<f32>, pixel_delta: vec3<f32>) -> vec3<f32> {
 fn ray_color(start_ray: Ray) -> vec3<f32> {
   var rec: HitRecord;
   var ray = start_ray;
-  var color: vec3<f32> = ONE;
+  var color: vec3<f32> = FORWARD * -0.0;
   var depth: i32;
   for (depth = 0; depth <= MAX_RAY_DEPTH; depth++) {
     var rec: HitRecord;
     if !hit(ray, &rec) {
-      let a = 0.5 * (ray.direction.y + 1.0);
-      color *= (1.0 - a) * ONE + a * vec3(0.5, 0.7, 1.0);
+      // let a = 0.5 * (ray.direction.y + 1.0);
+      // color *= (1.0 - a) * ONE + a * vec3(0.5, 0.7, 1.0);
       return color;
-      // return color;
+    }
+
+    if sin(4.0 * rec.normal.x * PI) + cos(4.0 * rec.normal.y * PI) > 1.0 && rec.index % 2u == 0u {
+      color = rec.color * 4.0;
+    }
+    if sin(4.0 * rec.normal.x * PI) + cos(4.0 * rec.normal.y * PI) > 0.0 && rec.index % 2u == 0u {
+      color = rec.color * 4.0;
     }
 
     // if depth == 2 {
@@ -133,7 +140,7 @@ fn ray_color(start_ray: Ray) -> vec3<f32> {
     // }
     ray.direction = rec.normal + random_unit_vector();
     ray.origin = rec.point;
-    color *= 1.0 * rec.color;
+    color *= 0.8 * rec.color;
     // return color;
     let x = random_on_hemisphere(rec.normal).z;
   }
@@ -162,6 +169,7 @@ fn hit(ray: Ray, rec: ptr<function, HitRecord>) -> bool {
       hit_anything = true;
       closest_so_far = temp_rec.t;
       *rec = temp_rec;
+      (*rec).index = i;
     }
   }
 
