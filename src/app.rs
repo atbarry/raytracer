@@ -4,7 +4,7 @@ use crate::render_env::RenderEnv;
 use crate::world::World;
 use crate::screen::Screen;
 use wgpu::{ColorTargetState, CommandEncoderDescriptor, RenderPipeline, TextureViewDescriptor};
-use winit::event::{KeyEvent, ElementState};
+use winit::event::{KeyEvent, ElementState, MouseButton, WindowEvent, Modifiers};
 use winit::keyboard::{PhysicalKey, KeyCode};
 
 pub struct App {
@@ -12,6 +12,7 @@ pub struct App {
     ray_tracer: Raytracer,
     screen: Screen,
     world: World,
+    modifiers: Modifiers,
 }
 
 impl App {
@@ -23,16 +24,18 @@ impl App {
             render_env,
             &ray_tracer.sampler_bind_layout,
         );
+        let modifiers = Modifiers::default();
 
         Ok(Self {
             time,
             ray_tracer,
             screen,
             world,
+            modifiers,
         })
     }
 
-    pub fn on_input(&mut self, render_env: &RenderEnv, input: winit::event::KeyEvent) {
+    pub fn on_key_input(&mut self, render_env: &RenderEnv, input: winit::event::KeyEvent) {
         match input {
             KeyEvent { physical_key: PhysicalKey::Code(key), state: ElementState::Pressed, .. } => {
                 self.world.on_key_press(render_env, key);
@@ -42,6 +45,23 @@ impl App {
             }
             _ => (),
         }
+    }
+
+    pub fn on_event(&mut self, render_env: &RenderEnv, event: WindowEvent) {
+        match event {
+            WindowEvent::KeyboardInput { event: key_input, .. } => self.on_key_input(render_env, key_input),
+            WindowEvent::MouseWheel { delta, .. } => {
+                self.world.on_scroll(render_env, delta, &self.modifiers);
+            }
+            WindowEvent::ModifiersChanged(modifiers) => {
+                self.modifiers = modifiers;
+            }
+            _ => (),
+        }
+    }
+
+    pub fn on_mouse_input(&mut self, render_env: &RenderEnv, button: MouseButton) {
+
     }
 
     pub fn update(&mut self, render_env: &RenderEnv) {

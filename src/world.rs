@@ -1,11 +1,11 @@
 use crate::{render_env::RenderEnv, common::UNIFORM_BUFFER_BINDING};
 use bytemuck::{bytes_of, Pod, Zeroable};
-use glam::{Vec3, Vec3Swizzles, Vec4, vec3};
+use glam::{Vec3, Vec3Swizzles, Vec4, vec3, vec2};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     *,
 };
-use winit::keyboard::KeyCode;
+use winit::{keyboard::KeyCode, event::{MouseScrollDelta, Modifiers}};
 
 use self::{objects::{ObjectData, Sphere}, camera::Camera};
 
@@ -34,15 +34,18 @@ impl World {
             },
         ];
         let objects = ObjectData {
-            spheres,
+            spheres: Sphere::random_bunch(),
         };
 
         let camera = Camera {
-            pos: Vec3::new(0.0, 0.0, 0.0),
+            pos: Vec3::new(0.0, 0.0, 10.00),
             forward: Vec3::new(0.0, 0.0, -1.0),
             up: Vec3::new(0.0, 1.0, 0.0),
             right: Vec3::new(1.0, 0.0, 0.0),
-            focal_length: 1.0,
+            z_near: 1.0,
+            z_far: 1000.0,
+            resoultion: vec2(1920.0, 1080.0),
+            fov: 0.25,
             samples_per_pixel: 1,
             frames_to_render: 8,
             current_frame: 0,
@@ -134,6 +137,12 @@ impl World {
 
         if scene_was_changed {
             self.scene_was_updated(&render_env);
+        }
+    }
+
+    pub fn on_scroll(&mut self, render_env: &RenderEnv, delta: MouseScrollDelta, modifiers: &Modifiers) {
+        if self.camera.mouse_scroll(delta, modifiers) {
+            self.scene_was_updated(render_env)
         }
     }
 

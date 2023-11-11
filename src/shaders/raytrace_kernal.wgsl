@@ -19,10 +19,9 @@ struct HitRecord {
 }
 
 struct Camera {
+  world_to_pixel: mat4x4<f32>,
+  pixel_to_world: mat4x4<f32>,
   pos: vec3<f32>,
-  forward: vec3<f32>,
-  right: vec3<f32>,
-  up: vec3<f32>,
   padding: u32,
   focal_length: f32,
   samples_per_pixel: u32,
@@ -51,6 +50,9 @@ const CACHE_ON: bool = true;
 const PI: f32 = 3.1415926535897932385;
 const MAX_U32: u32 = 4294967295u;
 
+var<private> uv: vec2<u32>;
+var<private> size: vec2<u32>;
+
 @group(0) @binding(0) var color_buffer: texture_storage_2d<rgba8unorm, write>;
 @group(1) @binding(0) var color_cache: texture_2d<f32>;
 @group(2) @binding(0) var<uniform> camera: Camera;
@@ -58,37 +60,31 @@ const MAX_U32: u32 = 4294967295u;
 @group(3) @binding(0) var<uniform> time: f32;
 
 @compute @workgroup_size(1,1,1)
-fn main(@builtin(global_invocation_id) uv: vec3<u32>) {
+fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
+  size = textureDimensions(color_buffer);
+  uv = global_invocation_id.xy;
   if camera.current_frame >= camera.frames_to_render && CACHE_ON {
     // store_color(to_vec4(ONE), uv.xy);
     return;
   }
 
-  initialize_rng(uv.x, uv.y);
-  let screen_size = textureDimensions(color_buffer);
-  let scan_x = f32(uv.x);
-  let scan_y = f32(uv.y);
-  let scan = vec2<f32>(scan_x, scan_y);
-
-  let viewport_height = 2.0;
-  let viewport_width = viewport_height * f32(screen_size.x) / f32(screen_size.y);
-
-  let viewport_u = camera.right * viewport_width;
-  let viewport_v = -camera.up * viewport_height;
-  
-  let pixel_delta_u = viewport_u / f32(screen_size.x);
-  let pixel_delta_v = viewport_v / f32(screen_size.y);
-
-  let viewport_bottom_left = camera.pos + camera.forward*camera.focal_length - viewport_u / 2.0 - viewport_v / 2.0;
-  let pixel00_pos = viewport_bottom_left + 0.5 * (pixel_delta_u + pixel_delta_v);
-
-  let pixel_center = pixel00_pos + scan_x*pixel_delta_u + scan_y*pixel_delta_v;
-  let pixel_color = send_rays(pixel_center, pixel_delta_v + pixel_delta_u);
-
-  store_color(to_vec4(pixel_color), uv.xy);
+  initialize_rng();
+  let pixel_color = send_rays();
+  store_color(to_vec4(pixel_color));
 }
 
-fn store_color(pixel_color: vec4<f32>, uv: vec2<u32>) {
+fn pixel_to_world(pixel_uv: vec2<u32>) -> vec3<f32> {
+  let uv4 = vec4<f32>(f32(pixel_uv.x), f32(size.y - pixel_uv.y), 0.0, 1.0);
+  return (camera.pixel_to_world * uv4).xyz;
+}
+
+fn get_pixel_delta() -> vec3<f32> {
+  let center = pixel_to_world(uv);
+  let uvnext = pixel_to_world(vec2<u32>(1u,1u) + uv);
+  return uvnext - center;
+}
+
+fn store_color(pixel_color: vec4<f32>) {
   var color = pixel_color;
   if CACHE_ON {
     let cached_color = textureLoad(color_cache, uv, 0);
@@ -106,7 +102,9 @@ fn combine_pixel_cache_color(pixel_color: vec4<f32>, cached_color: vec4<f32>) ->
   return pixel_color*rw + cached_color*cw; 
 }
 
-fn send_rays(pixel_center: vec3<f32>, pixel_delta: vec3<f32>) -> vec3<f32> {
+fn send_rays() -> vec3<f32> {
+  let pixel_center = pixel_to_world(uv);
+  let pixel_delta = get_pixel_delta();
   var color = ZERO;
   for(var sample = 0u; sample < camera.samples_per_pixel; sample++) {
     let ray = get_random_ray(pixel_center, pixel_delta, sample);
@@ -125,6 +123,7 @@ fn ray_color(start_ray: Ray) -> vec3<f32> {
     if !hit(ray, &rec) {
       let a = 0.5 * (ray.direction.y + 1.0);
       color *= (1.0 - a) * ONE + a * vec3(0.5, 0.7, 1.0);
+      color = clamp(color, ZERO, ONE);
       return color;
     }
 
@@ -232,7 +231,9 @@ fn set_face_normal(rec: ptr<function, HitRecord>, ray: Ray, outward_normal: vec3
 
 // RANDOM Stuff
 var<private> rng: u32;
-fn initialize_rng(u: u32, v: u32) {
+fn initialize_rng() {
+  let u = uv.x;
+  let v = uv.y;
   let x = (u << 15u) ^ (u*1729u + 8192374u);
   let y = (v << 21u) ^ (v*271u + 719827371u);
   let t = bitcast<u32>(time) * 87189u + 189273u;

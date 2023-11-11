@@ -3,9 +3,7 @@ mod app;
 mod render_env;
 mod raytracing;
 mod screen;
-mod world;
-mod common;
-
+mod world; mod common;
 use std::time::{Instant, Duration};
 use anyhow::Context;
 use app::App;
@@ -67,8 +65,8 @@ pub async fn run() -> anyhow::Result<()> {
             Event::WindowEvent { event: WindowEvent::Resized(size), .. } => {
                 render_env.resize();
             }
-            Event::WindowEvent { event: WindowEvent::KeyboardInput {event, .. }, .. } => {
-                app.on_input(&render_env, event);
+            Event::WindowEvent { event, .. } => {
+                app.on_event(&render_env, event);
             }
             _ => ()
         }
