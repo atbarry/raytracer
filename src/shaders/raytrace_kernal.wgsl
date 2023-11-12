@@ -41,7 +41,7 @@ const RIGHT: vec3<f32> = vec3<f32>(1.0, 0.0, 0.0);
 const FORWARD: vec3<f32> = vec3<f32>(0.0, 0.0, -1.0);
 
 // Shader variables
-const RAY_TMAX: f32 = 1000.0;
+const RAY_TMAX: f32 = 10000000.0;
 const RAY_TMIN: f32 = 0.001;
 const MAX_RAY_DEPTH: i32 = 50;
 const CACHE_ON: bool = true;
@@ -116,7 +116,7 @@ fn send_rays() -> vec3<f32> {
 fn ray_color(start_ray: Ray) -> vec3<f32> {
   var rec: HitRecord;
   var ray = start_ray;
-  var color: vec3<f32> = ONE * 0.5;
+  var color: vec3<f32> = ONE * 0.1;
   var depth: i32;
   for (depth = 0; depth <= MAX_RAY_DEPTH; depth++) {
     var rec: HitRecord;

@@ -1,25 +1,32 @@
-use std::{f32::consts::PI, io::Write};
+use std::{f32::consts::PI, io::Write, collections::HashSet};
 
 use bytemuck::{Pod, Zeroable};
-use glam::{Mat4, Vec2, Vec3, Vec3Swizzles, Vec4};
+use glam::{Mat4, Vec2, Vec3, Vec3Swizzles, Vec4, vec2, vec4, vec3};
 use winit::{
-    event::{Modifiers, MouseButton, MouseScrollDelta},
+    event::{Modifiers, MouseButton, MouseScrollDelta, ElementState},
     keyboard::{KeyCode, ModifiersKeyState, ModifiersState}, dpi::PhysicalPosition,
 };
+
+use crate::render_env::RenderEnv;
+
+const RIGHT: Vec3 = vec3(1.0, 0.0, 0.0);
+const UP: Vec3 = vec3(0.0, 1.0, 0.0);
+const FORWARD: Vec3 = vec3(0.0, 0.0, -1.0);
 
 #[derive(Copy, Clone, Debug)]
 pub struct Camera {
     pub pos: Vec3,
-    pub forward: Vec3,
-    pub right: Vec3,
-    pub up: Vec3,
-    pub z_near: f32,
-    pub z_far: f32,
-    pub fov: f32,
-    pub resoultion: Vec2,
-    pub samples_per_pixel: u32,
-    pub frames_to_render: u32,
-    pub current_frame: u32,
+    z_near: f32,
+    z_far: f32,
+    fov: f32,
+    resolution: Vec2, 
+    samples_per_pixel: u32,
+    frames_to_render: u32,
+    current_frame: u32,
+    speed: f32,
+    drag_start: Option<Vec2>,
+    look_direction: Vec3,
+    pixel_to_world_drag: Option<Mat4>,
 }
 
 #[repr(C)]
@@ -35,6 +42,23 @@ pub struct CameraRaw {
 }
 
 impl Camera {
+    pub fn new(render_env: &RenderEnv, pos: Vec3) -> Camera {
+        let res = render_env.window.inner_size();
+        Camera {
+            pos,
+            z_near: 1.0,
+            z_far: 100000.0,
+            resolution: vec2(res.width as f32, res.height as f32),
+            fov: 0.25,
+            samples_per_pixel: 1,
+            frames_to_render: 8,
+            current_frame: 0,
+            drag_start: None,
+            look_direction: vec3(0.0, 0.0, -1.0),
+            pixel_to_world_drag: None,
+            speed: 0.05,
+        }
+    }
     pub fn to_raw(&self) -> CameraRaw {
         CameraRaw {
             pixel_to_world: self.calculate_world_to_pixel().inverse(),
@@ -47,64 +71,52 @@ impl Camera {
         }
     }
 
-    pub fn calculate_world_to_pixel(&self) -> Mat4 {
-        let u = 1920.0;
-        let v = 1080.0;
-        let clip_to_pixel = Mat4::from_cols_array(&[
-            u / 2.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            v / 2.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1.0,
-            0.0,
-            u / 2.0,
-            v / 2.0,
-            0.0,
-            1.0,
-        ]);
+    fn clip_space_to_pixel(&self) -> Mat4 {
+        let u = self.resolution.x;
+        let v = self.resolution.y;
+        Mat4::from_cols_array(&[
+            u / 2.0, 0.0, 0.0, 0.0,
+            0.0, v / 2.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0, u / 2.0,
+            v / 2.0, 0.0, 1.0,
+        ])
+    }
 
+    fn perspective_proj(&self) -> Mat4 {
         let n = self.z_near;
         let f = self.z_far;
         let t = (self.fov * PI / 2.0).tan();
-        let a = self.resoultion.x / self.resoultion.y;
+        let a = self.resolution.x / self.resolution.y;
 
-        let perspective_proj = Mat4::from_cols_array(&[
-            1.0 / (a * t),
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            1.0 / t,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            -f / (f - n),
-            -1.0,
-            0.0,
-            0.0,
-            -f * n,
-            0.0,
-        ]);
+        Mat4::from_cols_array(&[
+            1.0 / (a * t), 0.0, 0.0, 0.0,
+            0.0, 1.0 / t, 0.0, 0.0,
+            0.0, 0.0, -f / (f - n), -1.0,
+            0.0, 0.0, -f * n, 0.0,
+        ])
+    }
 
+    fn rotation_matrix(&self) -> Mat4 {
+        Mat4::look_to_rh(vec3(0.0,0.0,0.0), self.look_direction, UP)
+    }
+
+    pub fn calculate_world_to_pixel(&self) -> Mat4 {
         let x = self.pos.x;
         let y = self.pos.y;
         let z = self.pos.z;
 
-        let world_to_camera = Mat4::from_cols_array(&[
-            1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -x, -y, -z, 1.0,
+        let world_to_camera_pos = Mat4::from_cols_array(&[
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            -x, -y, -z, 1.0,
         ]);
 
-        return clip_to_pixel * perspective_proj * world_to_camera;
+        self.clip_space_to_pixel() * self.perspective_proj() * self.rotation_matrix() * world_to_camera_pos
     }
 
-    pub fn key_press(&mut self, key: KeyCode) -> bool {
+    pub fn key_press(&mut self, key: KeyCode, keys_held: &HashSet<KeyCode>) -> bool {
+        let mut changed = true;
         match key {
             KeyCode::KeyK => self.samples_per_pixel *= 2,
             KeyCode::KeyJ => {
@@ -120,10 +132,45 @@ impl Camera {
                     self.frames_to_render = 1;
                 }
             }
-            _ => return false,
+            KeyCode::Backspace => {
+                self.frames_to_render = 1;
+                self.samples_per_pixel = 1
+            },
+            _ => changed = false,
         }
 
-        true
+        let mut held = |code: KeyCode| {
+            let c = keys_held.contains(&code);
+            if c { changed = true; }
+            c
+        };
+
+        let inverse_rotation = self.rotation_matrix().inverse();
+        let get_translation = |v: Vec3| {
+            let p = inverse_rotation.transform_point3(v);
+            vec3(p.x, 0.0, p.z).normalize() * self.speed
+        };
+
+        if held(KeyCode::KeyW) {
+            self.pos += get_translation(FORWARD);
+        }
+        if held(KeyCode::KeyS) {
+            self.pos -= get_translation(FORWARD);
+        }
+        if held(KeyCode::KeyD) {
+            self.pos += get_translation(RIGHT);
+        }
+        if held(KeyCode::KeyA) {
+            self.pos -= get_translation(RIGHT);
+        }
+        if held(KeyCode::Space) {
+            self.pos += UP * self.speed;
+        }
+        if held(KeyCode::ShiftLeft) {
+            self.pos -= UP * self.speed;
+        }
+
+        changed
     }
 
     pub fn mouse_scroll(&mut self, delta: MouseScrollDelta, modifiers: &Modifiers) -> bool {
@@ -143,6 +190,47 @@ impl Camera {
         self.fov = 2.0 * new.exp().atan() / PI;
         dbg!(self.fov);
 
+        true
+    }
+
+    // makes the camera look at a certain pixel based on its offset from the center
+    fn look_at_pixel_from_center(&mut self, offset: Vec2) {
+        let pixel = self.resolution / 2.0 + offset;
+        let offset_3d = vec3(pixel.x, pixel.y, 0.0);
+        if let Some(pixel_to_world) = self.pixel_to_world_drag {
+            self.look_direction = pixel_to_world.transform_point3(offset_3d).normalize();
+        } else {
+            dbg!("Pixel to world is none");
+        }
+    }
+
+    pub fn mouse_drag(&mut self,
+        mouse_pos: Vec2,
+        state: Option<ElementState>,
+        button: Option<MouseButton>,
+    ) -> bool {
+        if Some(MouseButton::Left) == button {
+            let state = state.unwrap();
+
+            if !state.is_pressed() && self.drag_start.is_some() {
+                self.drag_start = None;
+                self.pixel_to_world_drag = None;
+                return false;
+            }
+
+            if self.drag_start.is_none() && state.is_pressed() {
+                self.drag_start = Some(mouse_pos);
+                self.pixel_to_world_drag = Some(self.calculate_world_to_pixel().inverse());
+            }
+
+            return true;
+        }
+
+        let Some(start_uv) = self.drag_start else {
+            return false;
+        };
+
+        self.look_at_pixel_from_center(start_uv - mouse_pos);
         true
     }
 

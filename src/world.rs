@@ -1,16 +1,25 @@
-use crate::{render_env::RenderEnv, common::UNIFORM_BUFFER_BINDING};
+use std::collections::HashSet;
+
+use crate::{common::UNIFORM_BUFFER_BINDING, render_env::RenderEnv};
 use bytemuck::{bytes_of, Pod, Zeroable};
-use glam::{Vec3, Vec3Swizzles, Vec4, vec3, vec2};
+use glam::{vec2, vec3, Vec3, Vec3Swizzles, Vec4, Vec2};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     *,
 };
-use winit::{keyboard::KeyCode, event::{MouseScrollDelta, Modifiers}};
+use winit::{
+    dpi::PhysicalPosition,
+    event::{ElementState, Modifiers, MouseButton, MouseScrollDelta},
+    keyboard::KeyCode,
+};
 
-use self::{objects::{ObjectData, Sphere}, camera::Camera};
+use self::{
+    camera::Camera,
+    objects::{ObjectData, Sphere},
+};
 
-mod objects;
 mod camera;
+mod objects;
 
 pub struct World {
     camera: Camera,
@@ -26,7 +35,7 @@ impl World {
         let device = &render_env.device;
 
         let spheres = vec![
-            Sphere::new(vec3(0.0,-0.0, -1.0), 0.5),
+            Sphere::new(vec3(0.0, 0.0, -1.0), 0.5),
             Sphere {
                 color: Vec4::ONE,
                 radius: 100.0,
@@ -37,20 +46,7 @@ impl World {
             spheres: Sphere::random_bunch(),
         };
 
-        let camera = Camera {
-            pos: Vec3::new(0.0, 0.0, 10.00),
-            forward: Vec3::new(0.0, 0.0, -1.0),
-            up: Vec3::new(0.0, 1.0, 0.0),
-            right: Vec3::new(1.0, 0.0, 0.0),
-            z_near: 1.0,
-            z_far: 1000.0,
-            resoultion: vec2(1920.0, 1080.0),
-            fov: 0.25,
-            samples_per_pixel: 1,
-            frames_to_render: 8,
-            current_frame: 0,
-        };
-
+        let camera = Camera::new(&render_env, vec3(0.0, 0.0, 5.0));
         let camera_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Camera Buffer"),
             contents: bytes_of(&camera.to_raw()),
@@ -127,10 +123,10 @@ impl World {
         };
     }
 
-    pub fn on_key_press(&mut self, render_env: &RenderEnv, key: KeyCode) {
+    pub fn on_key_press(&mut self, render_env: &RenderEnv, key: KeyCode, keys_held: &HashSet<KeyCode>) {
         let queue = &render_env.queue;
         let mut scene_was_changed = false;
-        if self.camera.key_press(key) {
+        if self.camera.key_press(key, keys_held) {
             queue.write_buffer(&self.camera_buffer, 0, bytes_of(&self.camera.to_raw()));
             scene_was_changed = true;
         }
@@ -140,7 +136,24 @@ impl World {
         }
     }
 
-    pub fn on_scroll(&mut self, render_env: &RenderEnv, delta: MouseScrollDelta, modifiers: &Modifiers) {
+    pub fn on_mouse_input(
+        &mut self,
+        render_env: &RenderEnv,
+        mouse_pos: Vec2,
+        state: Option<ElementState>,
+        button: Option<MouseButton>,
+    ) {
+        if self.camera.mouse_drag(mouse_pos, state, button) {
+            self.scene_was_updated(render_env);
+        }
+    }
+
+    pub fn on_scroll(
+        &mut self,
+        render_env: &RenderEnv,
+        delta: MouseScrollDelta,
+        modifiers: &Modifiers,
+    ) {
         if self.camera.mouse_scroll(delta, modifiers) {
             self.scene_was_updated(render_env)
         }
@@ -148,12 +161,16 @@ impl World {
 
     fn scene_was_updated(&mut self, render_env: &RenderEnv) {
         self.camera.reset_render();
-        render_env.queue.write_buffer(&self.camera_buffer, 0, bytes_of(&self.camera.to_raw()));
+        render_env
+            .queue
+            .write_buffer(&self.camera_buffer, 0, bytes_of(&self.camera.to_raw()));
     }
 
     pub fn increase_frame(&mut self, render_env: &RenderEnv) {
         self.camera.increase_frame();
-        render_env.queue.write_buffer(&self.camera_buffer, 0, bytes_of(&self.camera.to_raw()));
+        render_env
+            .queue
+            .write_buffer(&self.camera_buffer, 0, bytes_of(&self.camera.to_raw()));
     }
 
     pub fn reload(&mut self, render_env: &RenderEnv) {
@@ -167,4 +184,3 @@ impl World {
         queue.write_buffer(&self.camera_buffer, 0, bytes_of(&self.camera.to_raw()));
     }
 }
-

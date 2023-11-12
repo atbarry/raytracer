@@ -1,9 +1,13 @@
+use std::collections::HashSet;
+
 use crate::common::{Shape, Time, Triangles, Vertex};
 use crate::raytracing::Raytracer;
 use crate::render_env::RenderEnv;
 use crate::world::World;
 use crate::screen::Screen;
+use glam::Vec2;
 use wgpu::{ColorTargetState, CommandEncoderDescriptor, RenderPipeline, TextureViewDescriptor};
+use winit::dpi::PhysicalPosition;
 use winit::event::{KeyEvent, ElementState, MouseButton, WindowEvent, Modifiers};
 use winit::keyboard::{PhysicalKey, KeyCode};
 
@@ -13,6 +17,8 @@ pub struct App {
     screen: Screen,
     world: World,
     modifiers: Modifiers,
+    cursor_pos: Vec2,
+    keys_held: HashSet<KeyCode>
 }
 
 impl App {
@@ -32,13 +38,21 @@ impl App {
             screen,
             world,
             modifiers,
+            cursor_pos: Vec2::ZERO,
+            keys_held: HashSet::new(),
         })
     }
 
     pub fn on_key_input(&mut self, render_env: &RenderEnv, input: winit::event::KeyEvent) {
         match input {
-            KeyEvent { physical_key: PhysicalKey::Code(key), state: ElementState::Pressed, .. } => {
-                self.world.on_key_press(render_env, key);
+            KeyEvent { physical_key: PhysicalKey::Code(key), state, .. } => {
+                if !state.is_pressed() {
+                    self.keys_held.remove(&key);
+                    return;
+                }
+
+                self.keys_held.insert(key);
+                self.world.on_key_press(render_env, key, &self.keys_held);
                 if key == KeyCode::KeyR {
                     self.world.reload(render_env);
                 }
@@ -51,21 +65,29 @@ impl App {
         match event {
             WindowEvent::KeyboardInput { event: key_input, .. } => self.on_key_input(render_env, key_input),
             WindowEvent::MouseWheel { delta, .. } => {
-                self.world.on_scroll(render_env, delta, &self.modifiers);
-            }
+                self.world.on_scroll(render_env, delta, &self.modifiers); }
             WindowEvent::ModifiersChanged(modifiers) => {
                 self.modifiers = modifiers;
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                self.cursor_pos = Vec2 {
+                    x: position.x as f32,
+                    y: render_env.window.inner_size().height as f32 - position.y as f32,
+                };
+                self.world.on_mouse_input(render_env, self.cursor_pos, None, None);
+            }
+            WindowEvent::MouseInput { state, button, .. } => {
+                self.world.on_mouse_input(render_env, self.cursor_pos, Some(state), Some(button));
             }
             _ => (),
         }
     }
 
-    pub fn on_mouse_input(&mut self, render_env: &RenderEnv, button: MouseButton) {
-
-    }
 
     pub fn update(&mut self, render_env: &RenderEnv) {
         self.time.add_delta(render_env, 0.01);
+        // TODO: Fix this awful solution lol
+        self.world.on_key_press(render_env, KeyCode::F35, &self.keys_held);
     }
 
     pub fn render(&mut self, render_env: &RenderEnv) -> anyhow::Result<()> {
