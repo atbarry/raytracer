@@ -1,9 +1,11 @@
-#![allow(unused_imports)]
+#![allow(unused_imports, dead_code)]
 mod app;
 mod render_env;
 mod raytracing;
 mod screen;
-mod world; mod common;
+mod world; 
+mod common;
+mod resources;
 use std::time::{Instant, Duration};
 use anyhow::Context;
 use app::App;

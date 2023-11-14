@@ -14,6 +14,11 @@ const UP: Vec3 = vec3(0.0, 1.0, 0.0);
 const FORWARD: Vec3 = vec3(0.0, 0.0, -1.0);
 
 #[derive(Copy, Clone, Debug)]
+struct Drag {
+    pub last_mouse_pos: Vec2,
+}
+
+#[derive(Copy, Clone, Debug)]
 pub struct Camera {
     pub pos: Vec3,
     z_near: f32,
@@ -24,9 +29,8 @@ pub struct Camera {
     frames_to_render: u32,
     current_frame: u32,
     speed: f32,
-    drag_start: Option<Vec2>,
+    drag: Option<Drag>,
     look_direction: Vec3,
-    pixel_to_world_drag: Option<Mat4>,
 }
 
 #[repr(C)]
@@ -53,9 +57,8 @@ impl Camera {
             samples_per_pixel: 1,
             frames_to_render: 8,
             current_frame: 0,
-            drag_start: None,
+            drag: None,
             look_direction: vec3(0.0, 0.0, -1.0),
-            pixel_to_world_drag: None,
             speed: 0.05,
         }
     }
@@ -118,58 +121,41 @@ impl Camera {
     pub fn key_press(&mut self, key: KeyCode, keys_held: &HashSet<KeyCode>) -> bool {
         let mut changed = true;
         match key {
-            KeyCode::KeyK => self.samples_per_pixel *= 2,
-            KeyCode::KeyJ => {
-                self.samples_per_pixel /= 2;
-                if self.samples_per_pixel == 0 {
-                    self.samples_per_pixel = 1;
-                }
-            }
-            KeyCode::KeyI => self.frames_to_render *= 2,
-            KeyCode::KeyU => {
-                self.frames_to_render /= 2;
-                if self.frames_to_render == 0 {
-                    self.frames_to_render = 1;
-                }
-            }
+            KeyCode::KeyK => self.samples_per_pixel = (self.samples_per_pixel * 2).min(256),
+            KeyCode::KeyJ => self.samples_per_pixel = (self.samples_per_pixel / 2).max(1),
+            KeyCode::KeyI => self.frames_to_render = (self.frames_to_render * 2).min(256),
+            KeyCode::KeyU => self.frames_to_render = (self.frames_to_render / 2).max(1),
+            KeyCode::ArrowUp => self.zoom(-1.0),
+            KeyCode::ArrowDown => self.zoom(1.0),
             KeyCode::Backspace => {
                 self.frames_to_render = 1;
                 self.samples_per_pixel = 1
-            },
+            }
             _ => changed = false,
         }
 
+        let inverse_rotation = self.rotation_matrix().inverse();
         let mut held = |code: KeyCode| {
             let c = keys_held.contains(&code);
             if c { changed = true; }
             c
         };
-
-        let inverse_rotation = self.rotation_matrix().inverse();
         let get_translation = |v: Vec3| {
             let p = inverse_rotation.transform_point3(v);
-            vec3(p.x, 0.0, p.z).normalize() * self.speed
+            p.xyz().normalize() * self.speed
+        };
+        let mut move_dir_on_key = |key: KeyCode, dir: Vec3| {
+            if held(key) {
+                self.pos += get_translation(dir);
+            }
         };
 
-        if held(KeyCode::KeyW) {
-            self.pos += get_translation(FORWARD);
-        }
-        if held(KeyCode::KeyS) {
-            self.pos -= get_translation(FORWARD);
-        }
-        if held(KeyCode::KeyD) {
-            self.pos += get_translation(RIGHT);
-        }
-        if held(KeyCode::KeyA) {
-            self.pos -= get_translation(RIGHT);
-        }
-        if held(KeyCode::Space) {
-            self.pos += UP * self.speed;
-        }
-        if held(KeyCode::ShiftLeft) {
-            self.pos -= UP * self.speed;
-        }
-
+        move_dir_on_key(KeyCode::KeyW, FORWARD);
+        move_dir_on_key(KeyCode::KeyS, -FORWARD);
+        move_dir_on_key(KeyCode::KeyD, RIGHT);
+        move_dir_on_key(KeyCode::KeyA, -RIGHT);
+        move_dir_on_key(KeyCode::Space, UP);
+        move_dir_on_key(KeyCode::ShiftLeft, -UP);
         changed
     }
 
@@ -185,26 +171,26 @@ impl Camera {
             }
         };
 
+        self.zoom(val);
+        true
+    }
+
+    fn zoom(&mut self, val: f32) {
         let old = (self.fov * PI / 2.0).tan().ln();
         let new = old + val / 5.0;
         self.fov = 2.0 * new.exp().atan() / PI;
-        dbg!(self.fov);
-
-        true
     }
 
     // makes the camera look at a certain pixel based on its offset from the center
     fn look_at_pixel_from_center(&mut self, offset: Vec2) {
         let pixel = self.resolution / 2.0 + offset;
         let offset_3d = vec3(pixel.x, pixel.y, 0.0);
-        if let Some(pixel_to_world) = self.pixel_to_world_drag {
-            self.look_direction = pixel_to_world.transform_point3(offset_3d).normalize();
-        } else {
-            dbg!("Pixel to world is none");
-        }
+        let pixel_to_world = self.calculate_world_to_pixel().inverse();
+        self.look_direction = pixel_to_world.transform_point3(offset_3d).normalize();
     }
 
     pub fn mouse_drag(&mut self,
+        render_env: &RenderEnv,
         mouse_pos: Vec2,
         state: Option<ElementState>,
         button: Option<MouseButton>,
@@ -212,25 +198,31 @@ impl Camera {
         if Some(MouseButton::Left) == button {
             let state = state.unwrap();
 
-            if !state.is_pressed() && self.drag_start.is_some() {
-                self.drag_start = None;
-                self.pixel_to_world_drag = None;
+            if !state.is_pressed() && self.drag.is_some() {
+                render_env.window.set_cursor_visible(true);
+                self.drag = None;
                 return false;
             }
 
-            if self.drag_start.is_none() && state.is_pressed() {
-                self.drag_start = Some(mouse_pos);
-                self.pixel_to_world_drag = Some(self.calculate_world_to_pixel().inverse());
+            if self.drag.is_none() && state.is_pressed() {
+                render_env.window.set_cursor_visible(false);
+                self.drag = Some(Drag { last_mouse_pos: mouse_pos });
             }
 
             return true;
         }
 
-        let Some(start_uv) = self.drag_start else {
+        let Some(drag) = &mut self.drag else {
             return false;
         };
 
-        self.look_at_pixel_from_center(start_uv - mouse_pos);
+        let delta = drag.last_mouse_pos - mouse_pos;
+        drag.last_mouse_pos = self.resolution / 2.0;
+        let center = PhysicalPosition::<f64>::new(drag.last_mouse_pos.x as f64, drag.last_mouse_pos.y as f64);
+        if let Err(e) = render_env.window.set_cursor_position(center) {
+            dbg!("Unable to set cursor pos", e);
+        };
+        self.look_at_pixel_from_center(delta);
         true
     }
 

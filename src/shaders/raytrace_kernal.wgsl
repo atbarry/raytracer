@@ -116,7 +116,7 @@ fn send_rays() -> vec3<f32> {
 fn ray_color(start_ray: Ray) -> vec3<f32> {
   var rec: HitRecord;
   var ray = start_ray;
-  var color: vec3<f32> = ONE * 0.1;
+  var color: vec3<f32> = ONE * 0.6;
   var depth: i32;
   for (depth = 0; depth <= MAX_RAY_DEPTH; depth++) {
     var rec: HitRecord;
@@ -127,13 +127,17 @@ fn ray_color(start_ray: Ray) -> vec3<f32> {
       return color;
     }
 
-    let b = sin(4.0 * rec.normal.x * PI) + 2.0 * cos(4.0 * rec.normal.y * PI);
-    if rec.index % 2u == 0u && b < -0.0 {
-      color = rec.color;
-    }
-    if rec.index % 2u == 0u && b > 0.0 {
+    let b = sin(4.0 * rec.normal.x * PI);
+    let c = cos(4.0 * rec.normal.y * PI);
+    let d = cos(4.0 * rec.normal.y * PI) + sin(4.0 * rec.normal.x * PI);
+
+    if d > 0.0 && rec.index % 2u == 0u {
       color = rec.color * 4.0;
     }
+
+    // if rec.index % 2u == 0u && b > 0.0 {
+    // color = rec.color * 4.0;
+    // }
 
     // if depth == 2 {
     // return RIGHT;

@@ -22,17 +22,17 @@ pub struct Sphere {
 
 impl Sphere {
     pub fn random_bunch() -> Vec<Sphere> {
-        let from = vec3(-5.0, -3.0, -1.5);
-        let to = vec3(5.0, 3.0, -10.0);
+        let from = vec3(-1.0, -1.0, -1.0) * 4.0;
+        let to = vec3(1.0, 1.0, -2.0) * 4.0;
 
         let mut rng = rand::thread_rng();
-        let num = rng.gen_range(15..22);
+        let num = rng.gen_range(30..45);
 
         (0..num).into_iter().map(|_| 
             Sphere {
                 color: rng.gen(),
                 center: rng.gen::<Vec3>() * (to - from) + from,
-                radius: rng.gen_range(0.2..2.0),
+                radius: rng.gen::<f32>().powi(2) * 2.0 + 0.2,
             }
         ).collect()
     }

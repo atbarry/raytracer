@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-
 use crate::{common::UNIFORM_BUFFER_BINDING, render_env::RenderEnv};
 use bytemuck::{bytes_of, Pod, Zeroable};
 use glam::{vec2, vec3, Vec3, Vec3Swizzles, Vec4, Vec2};
@@ -13,13 +12,11 @@ use winit::{
     keyboard::KeyCode,
 };
 
-use self::{
-    camera::Camera,
-    objects::{ObjectData, Sphere},
+use crate::resources::{
+    Camera,
+    ObjectData,
+    Sphere,
 };
-
-mod camera;
-mod objects;
 
 pub struct World {
     camera: Camera,
@@ -43,7 +40,7 @@ impl World {
             },
         ];
         let objects = ObjectData {
-            spheres: Sphere::random_bunch(),
+            spheres,
         };
 
         let camera = Camera::new(&render_env, vec3(0.0, 0.0, 5.0));
@@ -143,7 +140,7 @@ impl World {
         state: Option<ElementState>,
         button: Option<MouseButton>,
     ) {
-        if self.camera.mouse_drag(mouse_pos, state, button) {
+        if self.camera.mouse_drag(render_env, mouse_pos, state, button) {
             self.scene_was_updated(render_env);
         }
     }
