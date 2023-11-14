@@ -21,14 +21,13 @@ pub struct Sphere {
 }
 
 impl Sphere {
-    pub fn random_bunch() -> Vec<Sphere> {
-        let from = vec3(-1.0, -1.0, -1.0) * 4.0;
-        let to = vec3(1.0, 1.0, -2.0) * 4.0;
+    pub fn random_bunch(amount: u32) -> Vec<Sphere> {
+        let from = vec3(-1.0, -1.0, -1.0) * (amount as f32).sqrt();
+        let to = vec3(1.0, 1.0, -2.0) * (amount as f32).sqrt();
 
         let mut rng = rand::thread_rng();
-        let num = rng.gen_range(30..45);
 
-        (0..num).into_iter().map(|_| 
+        (0..amount).into_iter().map(|_| 
             Sphere {
                 color: rng.gen(),
                 center: rng.gen::<Vec3>() * (to - from) + from,

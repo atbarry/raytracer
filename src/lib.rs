@@ -13,10 +13,11 @@ use render_env::RenderEnv;
 use winit::{event_loop::{EventLoop, ControlFlow}, window::WindowBuilder, event::{Event, WindowEvent, StartCause}, dpi::PhysicalSize};
 
 pub async fn run() -> anyhow::Result<()> {
+    let win_size = PhysicalSize::new(2u32.pow(11), 2u32.pow(10));
     let event_loop = EventLoop::new().context("Failed to start event loop")?;
     let window = WindowBuilder::new()
         .with_title("Ray tracer")
-        .with_inner_size(PhysicalSize::new(3840/2, 2160/2))
+        .with_inner_size(win_size)
         .build(&event_loop)?;
     let mut render_env = RenderEnv::new(window).await?;
     let mut app = App::new(&render_env)?;

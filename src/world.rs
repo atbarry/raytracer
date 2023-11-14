@@ -40,7 +40,8 @@ impl World {
             },
         ];
         let objects = ObjectData {
-            spheres,
+            // spheres,
+            spheres: Sphere::random_bunch(210)
         };
 
         let camera = Camera::new(&render_env, vec3(0.0, 0.0, 5.0));

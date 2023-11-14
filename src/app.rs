@@ -92,6 +92,7 @@ impl App {
 
     pub fn render(&mut self, render_env: &RenderEnv) -> anyhow::Result<()> {
         let device = &render_env.device;
+        let queue = &render_env.queue;
 
         let current_texture = render_env.surface.get_current_texture()?;
         let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor::default());
@@ -99,11 +100,15 @@ impl App {
         self.ray_tracer.compute(&mut encoder, &self.world.bind_group, &self.time.bind_group);
         self.screen.render(&mut encoder, &current_texture, &self.ray_tracer.sampler_bind_group);
 
-        render_env.queue.submit(Some(encoder.finish()));
+        queue.submit(Some(encoder.finish()));
 
         // this needs to be after the submit
         self.world.increase_frame(render_env);
         current_texture.present();
         Ok(())
+    }
+
+    fn performance(&mut self) {
+
     }
 }

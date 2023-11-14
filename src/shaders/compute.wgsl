@@ -1,3 +1,0 @@
-@compute
-fn csMain() {
-}

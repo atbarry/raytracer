@@ -189,7 +189,7 @@ impl Raytracer {
         ray_trace_pass.set_bind_group(1, &self.sampler_bind_group, &[]);
         ray_trace_pass.set_bind_group(2, world_bind_group, &[]);
         ray_trace_pass.set_bind_group(3, time_bind_group, &[]);
-        ray_trace_pass.dispatch_workgroups(width, height, 1);
+        ray_trace_pass.dispatch_workgroups(width/16, height/16, 1);
         drop(ray_trace_pass);
 
         encoder.copy_texture_to_texture(

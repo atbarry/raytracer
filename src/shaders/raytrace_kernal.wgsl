@@ -16,6 +16,7 @@ struct HitRecord {
   t: f32,
   index: u32,
   front_face: bool,
+  hit: bool,
 }
 
 struct Camera {
@@ -43,7 +44,7 @@ const FORWARD: vec3<f32> = vec3<f32>(0.0, 0.0, -1.0);
 // Shader variables
 const RAY_TMAX: f32 = 10000000.0;
 const RAY_TMIN: f32 = 0.001;
-const MAX_RAY_DEPTH: i32 = 50;
+const MAX_RAY_DEPTH: i32 = 10;
 const CACHE_ON: bool = true;
 
 // Other constants
@@ -59,7 +60,7 @@ var<private> size: vec2<u32>;
 @group(2) @binding(1) var<storage, read> objects: ObjectData;
 @group(3) @binding(0) var<uniform> time: f32;
 
-@compute @workgroup_size(1,1,1)
+@compute @workgroup_size(16,16,1)
 fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
   size = textureDimensions(color_buffer);
   uv = global_invocation_id.xy;
@@ -116,42 +117,49 @@ fn send_rays() -> vec3<f32> {
 fn ray_color(start_ray: Ray) -> vec3<f32> {
   var rec: HitRecord;
   var ray = start_ray;
-  var color: vec3<f32> = ONE * 0.6;
+  var color: vec3<f32> = ZERO;
+  var reflectance = 1.0;
   var depth: i32;
   for (depth = 0; depth <= MAX_RAY_DEPTH; depth++) {
-    var rec: HitRecord;
-    if !hit(ray, &rec) {
-      let a = 0.5 * (ray.direction.y + 1.0);
-      color *= (1.0 - a) * ONE + a * vec3(0.5, 0.7, 1.0);
-      color = clamp(color, ZERO, ONE);
-      return color;
+    rec = trace(ray);
+    if !rec.hit {
+      color += miss(ray) * reflectance;
+      break;
+    } else {
+      color += scatter(&ray, rec, &reflectance);
     }
-
-    let b = sin(4.0 * rec.normal.x * PI);
-    let c = cos(4.0 * rec.normal.y * PI);
-    let d = cos(4.0 * rec.normal.y * PI) + sin(4.0 * rec.normal.x * PI);
-
-    if d > 0.0 && rec.index % 2u == 0u {
-      color = rec.color * 4.0;
-    }
-
-    // if rec.index % 2u == 0u && b > 0.0 {
-    // color = rec.color * 4.0;
-    // }
-
-    // if depth == 2 {
-    // return RIGHT;
-    // }
-    ray.direction = rec.normal + random_unit_vector();
-    ray.origin = rec.point;
-    color *= 0.8 * rec.color;
-    // return color;
-    let x = random_on_hemisphere(rec.normal).z;
   }
 
-  // if it makes it out of the loop it did not
-  // hit any light
-  return ZERO;
+  return color;
+}
+
+fn miss(ray: Ray) -> vec3<f32> {
+  let a = 0.5 * (1.0 - ray.direction.y);
+  let color = (1.0 - a) * ONE + a * vec3(0.5, 0.7, 1.0);
+  return color;
+}
+
+fn scatter(ray: ptr<function, Ray>, rec: HitRecord, reflectance: ptr<function, f32>) -> vec3<f32> {
+  var color: vec3<f32> = rec.color;
+  let local_reflectance = 0.90;
+  color *= (1.0 - local_reflectance) * (*reflectance);
+  *reflectance *= local_reflectance;
+
+  let b = sin(4.0 * rec.normal.x * PI);
+  let c = cos(4.0 * rec.normal.y * PI);
+  let d = cos(4.0 * rec.normal.y * PI) + sin(4.0 * rec.normal.x * PI);
+
+  (*ray).origin = rec.point;
+  if rec.index % 2u == 0u {
+    (*ray).direction = reflection((*ray).direction, rec.normal);
+  } else {
+    (*ray).direction = rec.normal + random_unit_vector();
+  }
+  return color;
+}
+
+fn reflection(dir: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
+  return dir - 2.0 * dot(dir, normal) * normal;
 }
 
 fn get_random_ray(pixel_center: vec3<f32>, pixel_delta: vec3<f32>, ray_index: u32) -> Ray {
@@ -162,22 +170,22 @@ fn get_random_ray(pixel_center: vec3<f32>, pixel_delta: vec3<f32>, ray_index: u3
   return Ray(camera.pos, pixel_sample);
 }
 
-fn hit(ray: Ray, rec: ptr<function, HitRecord>) -> bool {
+fn trace(ray: Ray) -> HitRecord {
+  var rec: HitRecord;
   var temp_rec: HitRecord;
-  var hit_anything = false;
   var closest_so_far = RAY_TMAX;
 
   for (var i = 0u; i < arrayLength(&objects.spheres); i++) {
     let sphere = objects.spheres[i];
     if hit_sphere(ray, sphere, RAY_TMIN, closest_so_far, &temp_rec) {
-      hit_anything = true;
       closest_so_far = temp_rec.t;
-      *rec = temp_rec;
-      (*rec).index = i;
+      rec = temp_rec;
+      rec.index = i;
+      rec.hit = true;
     }
   }
 
-  return hit_anything;
+  return rec;
 }
 
 fn hit_sphere(

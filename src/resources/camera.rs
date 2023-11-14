@@ -183,6 +183,7 @@ impl Camera {
 
     // makes the camera look at a certain pixel based on its offset from the center
     fn look_at_pixel_from_center(&mut self, offset: Vec2) {
+        dbg!(self.resolution);
         let pixel = self.resolution / 2.0 + offset;
         let offset_3d = vec3(pixel.x, pixel.y, 0.0);
         let pixel_to_world = self.calculate_world_to_pixel().inverse();
