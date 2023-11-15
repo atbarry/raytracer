@@ -1,7 +1,8 @@
-use std::{f32::consts::PI, io::Write, collections::HashSet};
+use std::{f32::consts::PI, io::Write, collections::HashSet, mem::size_of};
 
-use bytemuck::{Pod, Zeroable};
+use bytemuck::{Pod, Zeroable, bytes_of};
 use glam::{Mat4, Vec2, Vec3, Vec3Swizzles, Vec4, vec2, vec4, vec3};
+use wgpu::{Buffer, BufferUsages};
 use winit::{
     event::{Modifiers, MouseButton, MouseScrollDelta, ElementState},
     keyboard::{KeyCode, ModifiersKeyState, ModifiersState}, dpi::PhysicalPosition,
@@ -18,9 +19,10 @@ struct Drag {
     pub last_mouse_pos: Vec2,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug)]
 pub struct Camera {
-    pub pos: Vec3,
+    buffer: Buffer,
+    pos: Vec3,
     z_near: f32,
     z_far: f32,
     fov: f32,
@@ -46,10 +48,17 @@ pub struct CameraRaw {
 }
 
 impl Camera {
-    pub fn new(render_env: &RenderEnv, pos: Vec3) -> Camera {
+    pub fn new(render_env: &RenderEnv) -> Camera {
         let res = render_env.window.inner_size();
-        Camera {
-            pos,
+        let buffer = render_env.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Camera Buffer"),
+            mapped_at_creation: false,
+            size: size_of::<CameraRaw>() as u64,
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+        let mut camera = Camera {
+            buffer,
+            pos: Vec3::ZERO,
             z_near: 1.0,
             z_far: 100000.0,
             resolution: vec2(res.width as f32, res.height as f32),
@@ -60,7 +69,10 @@ impl Camera {
             drag: None,
             look_direction: vec3(0.0, 0.0, -1.0),
             speed: 0.05,
-        }
+        };
+
+        camera.scene_was_updated(render_env);
+        camera
     }
     pub fn to_raw(&self) -> CameraRaw {
         CameraRaw {
@@ -118,7 +130,7 @@ impl Camera {
         self.clip_space_to_pixel() * self.perspective_proj() * self.rotation_matrix() * world_to_camera_pos
     }
 
-    pub fn key_press(&mut self, key: KeyCode, keys_held: &HashSet<KeyCode>) -> bool {
+    pub fn key_press(&mut self, render_env: &RenderEnv, key: KeyCode, keys_held: &HashSet<KeyCode>) {
         let mut changed = true;
         match key {
             KeyCode::KeyK => self.samples_per_pixel = (self.samples_per_pixel * 2).min(256),
@@ -156,12 +168,15 @@ impl Camera {
         move_dir_on_key(KeyCode::KeyA, -RIGHT);
         move_dir_on_key(KeyCode::Space, UP);
         move_dir_on_key(KeyCode::ShiftLeft, -UP);
-        changed
+
+        if changed {
+            self.scene_was_updated(render_env);
+        }
     }
 
-    pub fn mouse_scroll(&mut self, delta: MouseScrollDelta, modifiers: &Modifiers) -> bool {
+    pub fn mouse_scroll(&mut self, render_env: &RenderEnv, delta: MouseScrollDelta, modifiers: &Modifiers) {
         if modifiers.state() != ModifiersState::CONTROL {
-            return false;
+            return;
         }
 
         let val = match delta {
@@ -172,7 +187,7 @@ impl Camera {
         };
 
         self.zoom(val);
-        true
+        self.scene_was_updated(&render_env);
     }
 
     fn zoom(&mut self, val: f32) {
@@ -195,14 +210,14 @@ impl Camera {
         mouse_pos: Vec2,
         state: Option<ElementState>,
         button: Option<MouseButton>,
-    ) -> bool {
-        if Some(MouseButton::Left) == button {
+    ) {
+        if Some(MouseButton::Right) == button {
             let state = state.unwrap();
 
             if !state.is_pressed() && self.drag.is_some() {
                 render_env.window.set_cursor_visible(true);
                 self.drag = None;
-                return false;
+                return;
             }
 
             if self.drag.is_none() && state.is_pressed() {
@@ -210,11 +225,11 @@ impl Camera {
                 self.drag = Some(Drag { last_mouse_pos: mouse_pos });
             }
 
-            return true;
+            self.scene_was_updated(render_env);
         }
 
         let Some(drag) = &mut self.drag else {
-            return false;
+            return;
         };
 
         let delta = drag.last_mouse_pos - mouse_pos;
@@ -224,10 +239,10 @@ impl Camera {
             dbg!("Unable to set cursor pos", e);
         };
         self.look_at_pixel_from_center(delta);
-        true
+        self.scene_was_updated(render_env)
     }
 
-    pub fn increase_frame(&mut self) {
+    pub fn increase_frame(&mut self, render_env: &RenderEnv) {
         self.current_frame += 1;
         let msg = format!(
             "{}/{}",
@@ -238,6 +253,8 @@ impl Camera {
             (self.current_frame as f32) / (self.frames_to_render as f32),
             &msg,
         );
+
+        render_env.queue.write_buffer(&self.buffer, 0, bytes_of(&self.to_raw()));
     }
 
     pub fn to_string(&self) -> String {
@@ -250,6 +267,21 @@ impl Camera {
     pub fn reset_render(&mut self) {
         self.current_frame = 0;
         println!("\nRendering with:\n{}", self.to_string());
+    }
+
+    pub fn render_finished(&self) -> bool {
+        self.current_frame >= self.frames_to_render
+    }
+
+    pub fn scene_was_updated(&mut self, render_env: &RenderEnv) {
+        self.reset_render();
+        render_env
+            .queue
+            .write_buffer(&self.buffer, 0, bytes_of(&self.to_raw()));
+    }
+
+    pub fn buffer(&self) -> &Buffer {
+        &self.buffer
     }
 }
 

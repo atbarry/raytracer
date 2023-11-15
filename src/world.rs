@@ -1,6 +1,6 @@
 use std::collections::HashSet;
-use crate::{common::UNIFORM_BUFFER_BINDING, render_env::RenderEnv};
-use bytemuck::{bytes_of, Pod, Zeroable};
+use crate::{common::UNIFORM_BUFFER_BINDING, render_env::RenderEnv, resources::Material};
+use bytemuck::{bytes_of, Pod, Zeroable, cast_slice};
 use glam::{vec2, vec3, Vec3, Vec3Swizzles, Vec4, Vec2};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
@@ -19,37 +19,27 @@ use crate::resources::{
 };
 
 pub struct World {
-    camera: Camera,
     objects: ObjectData,
-    camera_buffer: Buffer,
     objects_buffer: Buffer,
+    materials: Vec<Material>,
+    materials_buffer: Buffer,
     pub bind_group: BindGroup,
     pub bind_group_layout: BindGroupLayout,
 }
 
 impl World {
-    pub fn new(render_env: &RenderEnv) -> Self {
+    pub fn new(render_env: &RenderEnv, camera_buffer: &Buffer) -> Self {
         let device = &render_env.device;
 
+        let materials = vec![Material::random_new(), Material::random_new()];
         let spheres = vec![
-            Sphere::new(vec3(0.0, 0.0, -1.0), 0.5),
-            Sphere {
-                color: Vec4::ONE,
-                radius: 100.0,
-                center: vec3(0.0, -100.5, -1.0),
-            },
+            Sphere::new(vec3(0.0, -100.5, 0.0), 100.0, 0),
+            Sphere::new(vec3(0.0, 0.0, -1.0), -2.0, 0),
         ];
         let objects = ObjectData {
-            // spheres,
-            spheres: Sphere::random_bunch(210)
+            spheres: Sphere::random_bunch(20, materials.len() as u32),
         };
-
-        let camera = Camera::new(&render_env, vec3(0.0, 0.0, 5.0));
-        let camera_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Camera Buffer"),
-            contents: bytes_of(&camera.to_raw()),
-            usage: BufferUsages::COPY_DST | BufferUsages::UNIFORM,
-        });
+        dbg!(&materials, spheres);
 
         let objects_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Camera Buffer"),
@@ -57,11 +47,10 @@ impl World {
             usage: BufferUsages::COPY_DST | BufferUsages::STORAGE,
         });
 
-        let frames_since_change = 0;
-        let frames_since_change_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Frames Since Change Buffer"),
-            contents: bytes_of(&frames_since_change),
-            usage: BufferUsages::COPY_DST | BufferUsages::UNIFORM,
+        let materials_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Camera Buffer"),
+            contents: cast_slice(&materials.as_slice()),
+            usage: BufferUsages::COPY_DST | BufferUsages::STORAGE,
         });
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -85,7 +74,11 @@ impl World {
                 },
                 BindGroupLayoutEntry {
                     binding: 2,
-                    ty: UNIFORM_BUFFER_BINDING,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
                     visibility: ShaderStages::COMPUTE,
                     count: None,
                 },
@@ -106,79 +99,22 @@ impl World {
                 },
                 BindGroupEntry {
                     binding: 2,
-                    resource: frames_since_change_buffer.as_entire_binding(),
+                    resource: materials_buffer.as_entire_binding(),
                 },
             ],
         });
 
         return Self {
-            camera,
             objects,
-            camera_buffer,
             objects_buffer,
+            materials,
+            materials_buffer,
             bind_group_layout,
             bind_group,
         };
     }
 
-    pub fn on_key_press(&mut self, render_env: &RenderEnv, key: KeyCode, keys_held: &HashSet<KeyCode>) {
-        let queue = &render_env.queue;
-        let mut scene_was_changed = false;
-        if self.camera.key_press(key, keys_held) {
-            queue.write_buffer(&self.camera_buffer, 0, bytes_of(&self.camera.to_raw()));
-            scene_was_changed = true;
-        }
-
-        if scene_was_changed {
-            self.scene_was_updated(&render_env);
-        }
-    }
-
-    pub fn on_mouse_input(
-        &mut self,
-        render_env: &RenderEnv,
-        mouse_pos: Vec2,
-        state: Option<ElementState>,
-        button: Option<MouseButton>,
-    ) {
-        if self.camera.mouse_drag(render_env, mouse_pos, state, button) {
-            self.scene_was_updated(render_env);
-        }
-    }
-
-    pub fn on_scroll(
-        &mut self,
-        render_env: &RenderEnv,
-        delta: MouseScrollDelta,
-        modifiers: &Modifiers,
-    ) {
-        if self.camera.mouse_scroll(delta, modifiers) {
-            self.scene_was_updated(render_env)
-        }
-    }
-
-    fn scene_was_updated(&mut self, render_env: &RenderEnv) {
-        self.camera.reset_render();
-        render_env
-            .queue
-            .write_buffer(&self.camera_buffer, 0, bytes_of(&self.camera.to_raw()));
-    }
-
-    pub fn increase_frame(&mut self, render_env: &RenderEnv) {
-        self.camera.increase_frame();
-        render_env
-            .queue
-            .write_buffer(&self.camera_buffer, 0, bytes_of(&self.camera.to_raw()));
-    }
-
-    pub fn reload(&mut self, render_env: &RenderEnv) {
-        let current_camera = self.camera;
-        *self = Self::new(render_env);
-        self.camera = current_camera.clone();
-        self.scene_was_updated(render_env);
-    }
-
-    fn update_buffers(&mut self, queue: &Queue) {
-        queue.write_buffer(&self.camera_buffer, 0, bytes_of(&self.camera.to_raw()));
+    pub fn reload(&mut self, render_env: &RenderEnv, camera_buffer: &Buffer) {
+        *self = Self::new(render_env, camera_buffer);
     }
 }

@@ -1,7 +1,15 @@
 struct Sphere {
-  color: vec3<f32>,
   center: vec3<f32>,
+  padding: u32,
   radius: f32,
+  material_index: u32,
+}
+
+struct Material {
+  color: vec4<f32>,
+  metallic: f32,
+  specular: f32, 
+  roughness: f32,
 }
 
 struct Ray {
@@ -12,11 +20,11 @@ struct Ray {
 struct HitRecord {
   point: vec3<f32>,
   normal: vec3<f32>,
-  color: vec3<f32>,
   t: f32,
   index: u32,
   front_face: bool,
   hit: bool,
+  material_index: u32,
 }
 
 struct Camera {
@@ -58,6 +66,7 @@ var<private> size: vec2<u32>;
 @group(1) @binding(0) var color_cache: texture_2d<f32>;
 @group(2) @binding(0) var<uniform> camera: Camera;
 @group(2) @binding(1) var<storage, read> objects: ObjectData;
+@group(2) @binding(2) var<storage, read> materials: array<Material>;
 @group(3) @binding(0) var<uniform> time: f32;
 
 @compute @workgroup_size(16,16,1)
@@ -65,7 +74,6 @@ fn main(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
   size = textureDimensions(color_buffer);
   uv = global_invocation_id.xy;
   if camera.current_frame >= camera.frames_to_render && CACHE_ON {
-    // store_color(to_vec4(ONE), uv.xy);
     return;
   }
 
@@ -140,7 +148,8 @@ fn miss(ray: Ray) -> vec3<f32> {
 }
 
 fn scatter(ray: ptr<function, Ray>, rec: HitRecord, reflectance: ptr<function, f32>) -> vec3<f32> {
-  var color: vec3<f32> = rec.color;
+  let material = materials[rec.material_index];
+  var color: vec3<f32> = material.color.xyz;
   let local_reflectance = 0.90;
   color *= (1.0 - local_reflectance) * (*reflectance);
   *reflectance *= local_reflectance;
@@ -216,7 +225,7 @@ fn hit_sphere(
   (*rec).t = root;
   (*rec).point = ray_at(ray, root);
   (*rec).normal = ((*rec).point - sphere.center) / sphere.radius;
-  (*rec).color = sphere.color;
+  (*rec).material_index = sphere.material_index;
 
   return true;
 }
