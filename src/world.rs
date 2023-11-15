@@ -31,15 +31,17 @@ impl World {
     pub fn new(render_env: &RenderEnv, camera_buffer: &Buffer) -> Self {
         let device = &render_env.device;
 
-        let materials = vec![Material::random_new(), Material::random_new()];
+        let materials = vec![Material::random_new(), Material::random_new(), Material::random_new()];
         let spheres = vec![
             Sphere::new(vec3(0.0, -100.5, 0.0), 100.0, 0),
-            Sphere::new(vec3(0.0, 0.0, -1.0), -2.0, 0),
+            Sphere::new(vec3(-1.0, 0.0, -1.0), 0.5, 1),
+            Sphere::new(vec3(1.0, 0.0, -1.0), 0.5, 2),
+            Sphere::new(vec3(0.0, 0.0, -1.0), 0.5, 0),
         ];
         let objects = ObjectData {
-            spheres: Sphere::random_bunch(20, materials.len() as u32),
+            // spheres: Sphere::random_bunch(20, materials.len() as u32),
+            spheres,
         };
-        dbg!(&materials, spheres);
 
         let objects_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Camera Buffer"),

@@ -34,7 +34,7 @@ impl Sphere {
             Sphere::new(
                 rng.gen::<Vec3>() * (to - from) + from,
                 1.0,
-                rng.gen_range(0..materials_len)
+                rng.gen_range(0..materials_len + 4)
             )
         ).collect()
     }
