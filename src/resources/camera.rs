@@ -235,7 +235,14 @@ impl Camera {
         let delta = drag.last_mouse_pos - mouse_pos;
         drag.last_mouse_pos = self.resolution / 2.0;
         let center = PhysicalPosition::<f64>::new(drag.last_mouse_pos.x as f64, drag.last_mouse_pos.y as f64);
+
+        if let Err(e) = render_env.window.set_cursor_grab(winit::window::CursorGrabMode::Locked) {
+            dbg!("Unable to set cursor pos", e);
+        };
         if let Err(e) = render_env.window.set_cursor_position(center) {
+            dbg!("Unable to set cursor pos", e);
+        };
+        if let Err(e) = render_env.window.set_cursor_grab(winit::window::CursorGrabMode::None) {
             dbg!("Unable to set cursor pos", e);
         };
         self.look_at_pixel_from_center(delta);
